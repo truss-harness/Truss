@@ -44,7 +44,7 @@
   "dependencies": {
     "@dotenvx/dotenvx": "^1.73.1",
     "@playwright/mcp": "0.0.29",
-    "adm-zip": "0.5.17",
+    "adm-zip": "0.6.0",
     "croner": "^10.0.1",
     "katex": "^0.17.0",
     "pandoc-wasm": "^1.1.0",
