@@ -1,0 +1,4 @@
+interface:
+  display_name: "Truss Internal AI Services"
+  short_description: "Route internal helper-model AI tasks"
+  default_prompt: "Use $truss-internal-ai-services to add or adjust server-only helper-model AI features in Truss."

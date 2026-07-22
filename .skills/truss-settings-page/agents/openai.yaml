@@ -1,0 +1,4 @@
+interface:
+  display_name: "Truss Settings Page"
+  short_description: "Maintain Truss settings UI and APIs"
+  default_prompt: "Use $truss-settings-page to update the Truss settings page safely."

@@ -1,0 +1,5 @@
+$ bun src/server/index.ts spawn . --no-autolaunch --port "7806"
+[mcp] MCP server stderr. {"line":"[browser] Starting bundled Camoufox browser. {\"executablePath\":\"C:\\\\Users\\\\ASUS\\\\.truss\\\\camoufox\\\\camoufox.exe\",\"headless\":true}","server":"Truss Web Tools"}
+[mcp] MCP server stderr. {"line":"[browser] Starting Camoufox launcher with node.","server":"Truss Web Tools"}
+[mcp] MCP server stderr. {"line":"[browser] Camoufox launcher is ready.","server":"Truss Web Tools"}
+[mcp] MCP server stderr. {"line":"[browser] Bundled Camoufox browser is ready.","server":"Truss Web Tools"}

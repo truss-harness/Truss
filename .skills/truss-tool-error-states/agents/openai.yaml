@@ -1,0 +1,4 @@
+interface:
+  display_name: "Truss Tool Error States"
+  short_description: "Preserve tool-call thinking and error details"
+  default_prompt: "Use $truss-tool-error-states to update Truss tool execution or tool error handling safely."

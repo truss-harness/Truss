@@ -1,0 +1,33 @@
+@use "sass:string";
+
+$canvas: #fbf9f4;
+$paper-warm: #f5f3ee;
+$canvas-muted: #e4e2dd;
+$ink-rgb: 27 28 25;
+$rivet-rgb: 101 94 76;
+$signal-rgb: 128 42 13;
+
+$canvas-backdrop:
+  radial-gradient(circle at 14% 14%, rgb-alpha($rivet-rgb, 0.18), transparent 28rem),
+  radial-gradient(circle at 86% 6%, rgb-alpha($signal-rgb, 0.18), transparent 24rem),
+  linear-gradient(135deg, $canvas 0%, $paper-warm 46%, $canvas-muted 100%);
+
+@function rgb-alpha($channels, $alpha) {
+  @return string.unquote("rgb(#{$channels} / #{$alpha})");
+}
+
+@function ink-alpha($alpha) {
+  @return rgb-alpha($ink-rgb, $alpha);
+}
+
+@mixin truss-grid {
+  background-image:
+    linear-gradient(ink-alpha(0.075) 1px, transparent 1px),
+    linear-gradient(90deg, ink-alpha(0.075) 1px, transparent 1px),
+    linear-gradient(135deg, transparent 48%, ink-alpha(0.07) 49%, transparent 50%);
+  background-size:
+    42px 42px,
+    42px 42px,
+    84px 84px;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 92%);
+}

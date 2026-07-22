@@ -1,0 +1,4 @@
+interface:
+  display_name: "Truss Storage Layer"
+  short_description: "Work with Truss database and settings storage"
+  default_prompt: "Use $truss-storage-layer to update Truss database-backed settings safely."

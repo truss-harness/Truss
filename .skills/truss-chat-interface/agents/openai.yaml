@@ -1,0 +1,4 @@
+interface:
+  display_name: "Truss Chat Interface"
+  short_description: "Work on Truss chat UI and model routing"
+  default_prompt: "Use $truss-chat-interface to update Truss chat UI or model routing safely."
