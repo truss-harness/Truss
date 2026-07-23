@@ -7,6 +7,7 @@ import {
   unsupportedAttachmentMessage,
 } from "../../shared/attachments.ts";
 import { convertWithPandocWasm } from "../pandoc.ts";
+import { ensurePdfjsRuntimePolyfills } from "./pdfjs-runtime-polyfills.ts";
 
 interface DocumentConversionInput {
   data: Uint8Array;
@@ -310,6 +311,8 @@ async function renderPdfPagesToImages({
 }
 
 async function createPdfParser(data: Uint8Array): Promise<PdfParser> {
+  await ensurePdfjsRuntimePolyfills();
+
   const { PDFParse } = (await import("pdf-parse")) as { PDFParse: PdfParseConstructor };
 
   return new PDFParse({ data });
