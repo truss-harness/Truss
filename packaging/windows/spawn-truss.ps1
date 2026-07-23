@@ -7,14 +7,23 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$trussExe = Join-Path $PSScriptRoot "truss.exe"
+$resolvedFolder = (Resolve-Path -LiteralPath $Folder).Path
+& (Join-Path $PSScriptRoot "open-truss.ps1") -NoLaunch
 
-if (-not (Test-Path -LiteralPath $trussExe)) {
-  throw "Could not find $trussExe."
+$body = @{
+  messageId = $null
+  sessionId = $null
+  workspacePath = $resolvedFolder
+} | ConvertTo-Json
+$response = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:7805/api/workspaces/launch" `
+  -ContentType "application/json" `
+  -Body $body `
+  -TimeoutSec 20
+
+if (-not $response.url) {
+  throw "The Truss service did not return a workspace URL."
 }
 
-Start-Process `
-  -FilePath $trussExe `
-  -ArgumentList "spawn `"$Folder`"" `
-  -WorkingDirectory $Folder `
-  -WindowStyle Hidden
+Start-Process ([string]$response.url)

@@ -349,7 +349,7 @@ export class ScheduledTasksRepository {
     const params: Array<number | string> = [];
 
     if (scope) {
-      where.push(`s.workspace_path ${scope.sql.includes("IS NULL") ? scope.sql : "= " + scope.sql}`);
+      where.push("s.workspace_path = ?");
       params.push(...scope.params);
     }
 

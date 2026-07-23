@@ -15,7 +15,6 @@ import {
   mergeCamoufoxUblockOriginPolicy,
   mergeCamoufoxAddonConfigEnv,
   resolveCamoufoxAddonPaths,
-  resolveCamoufoxHeadless,
 } from "../../src/server/utils/camoufox-browser.ts";
 
 const nodeCommand = process.env.TRUSS_CAMOUFOX_NODE?.trim() || "node";
@@ -28,19 +27,6 @@ const hasNode = (() => {
 })();
 
 describe("Camoufox launcher", () => {
-  it("honors visible browser env aliases", () => {
-    expect(resolveCamoufoxHeadless({})).toBe(true);
-    expect(resolveCamoufoxHeadless({ TRUSS_CAMOUFOX_HEADLESS: "false" })).toBe(false);
-    expect(resolveCamoufoxHeadless({ TRUSS_CAMOUFOX_CHILD_HEADLESS: "false" })).toBe(false);
-    expect(resolveCamoufoxHeadless({ TRUSS_CAMOUFOX_CHILD_HEADLESS: " false " })).toBe(false);
-    expect(
-      resolveCamoufoxHeadless({
-        TRUSS_CAMOUFOX_CHILD_HEADLESS: "false",
-        TRUSS_CAMOUFOX_HEADLESS: "true",
-      }),
-    ).toBe(false);
-  });
-
   it("merges add-on paths into Camoufox config env", () => {
     const env = {
       CAMOU_CONFIG_1: "{\"foo\":\"",
@@ -648,7 +634,7 @@ describe("Camoufox launcher", () => {
         ),
       );
 
-      expect(browserLaunchEvent?.headless).toBe(false);
+      expect(browserLaunchEvent?.headless).toBe(true);
       expect(pageOpenEvents).toHaveLength(2);
       expect(secondPageOpenIndex).toBeGreaterThan(-1);
       expect(firstGotoStartIndex).toBeGreaterThan(-1);

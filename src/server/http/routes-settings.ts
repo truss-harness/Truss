@@ -1020,7 +1020,7 @@ function validatePlaywrightMcpSettingsPatch(
   const source = value as Record<string, unknown>;
   const update: NonNullable<McpSettingsUpdateRequest["playwrightMcp"]> = {};
 
-  for (const key of ["enabled", "headless", "sharedBrowser"] as const) {
+  for (const key of ["enabled"] as const) {
     if (!Object.hasOwn(source, key)) {
       continue;
     }

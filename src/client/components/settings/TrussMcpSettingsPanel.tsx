@@ -190,9 +190,9 @@ export function TrussMcpSettingsPanel({
             Playwright Browser MCP
           </h3>
           <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-            Exposes Playwright MCP browser automation through Truss's managed
-            Camoufox launcher. Save and reload MCP servers after changing these
-            settings.
+            Exposes Playwright MCP browser automation through the always-headless
+            Camoufox instance owned by the global Truss Windows service. Save and
+            reload MCP servers after changing these settings.
           </p>
         </div>
         <div className="grid gap-3">
@@ -210,36 +210,6 @@ export function TrussMcpSettingsPanel({
               })
             }
           />
-          <div className="grid gap-3 border-t border-outline-variant pt-4 md:grid-cols-2">
-            <CommandRunnerGuardToggle
-              checked={draft.playwrightMcp.headless}
-              description="Runs the Camoufox launcher without a visible browser window for this MCP server."
-              icon="visibility_off"
-              label="Headless browser"
-              onChange={(value) =>
-                onDraftChange({
-                  playwrightMcp: {
-                    ...draft.playwrightMcp,
-                    headless: value,
-                  },
-                })
-              }
-            />
-            <CommandRunnerGuardToggle
-              checked={draft.playwrightMcp.sharedBrowser}
-              description="Uses Truss's process-local shared Camoufox lease when another bundled browser runtime is hosted in the same process."
-              icon="hub"
-              label="Shared browser lease"
-              onChange={(value) =>
-                onDraftChange({
-                  playwrightMcp: {
-                    ...draft.playwrightMcp,
-                    sharedBrowser: value,
-                  },
-                })
-              }
-            />
-          </div>
           <SettingsTextInput
             helpText="Use * for every upstream Playwright MCP tool, or comma/newline-separated tool names such as browser_navigate, browser_click, browser_type."
             label="Allowed tools"
@@ -833,5 +803,4 @@ function TrussMcpSetupInstructionsModal({
     </Modal>
   );
 }
-
 

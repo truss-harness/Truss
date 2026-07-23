@@ -421,9 +421,9 @@ Current behavior:
 - Provides `compile` and `compile:windows` scripts for Bun standalone binaries.
 - Resolves source/package roots differently from standalone executable roots so
   installed binaries can serve `public/` from the install directory.
-- Provides Windows package scripts for a per-user install, Start Menu launcher,
-  tray helper, autostart registration, user PATH registration, and optional
-  WinSW-backed service mode.
+- Provides Windows package scripts for an elevated machine install, Start Menu
+  launcher, tray helper, user PATH registration, and the mandatory
+  WinSW-backed `LocalSystem` service.
 
 Target behavior:
 

@@ -40,6 +40,7 @@ import type { McpLoaderResult, McpServerDefinition } from "./types.ts";
 export interface CreateMcpRuntimeOptions {
   conversationWorkspacePath: string | null;
   env: NodeJS.ProcessEnv;
+  managedBrowserEnv?: NodeJS.ProcessEnv;
   filesystemGrants?: FilesystemDirectoryGrantsRepository;
   mcpSettings?: McpSettingsRepository;
   onOrchestrationTimerFired?(event: OrchestrationTimerFiredNotification): void | Promise<void>;
@@ -548,6 +549,7 @@ export async function createMcpRuntime(
 ): Promise<McpRuntime> {
   const host = new McpClientHost({
     env: options.env,
+    managedBrowserEnv: options.managedBrowserEnv,
     onNotification: (notification) => handleMcpClientNotification(notification, options),
   });
   const loaderResult = await loadRuntimeMcpServers(options);

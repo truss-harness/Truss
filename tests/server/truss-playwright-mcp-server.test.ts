@@ -148,8 +148,6 @@ function createRuntime(
 ): TrussPlaywrightMcpRuntimeState {
   const mergedSettings: PlaywrightMcpSettingsSummary = {
     enabled: true,
-    headless: true,
-    sharedBrowser: true,
     tools: "*",
     ...settings,
   };

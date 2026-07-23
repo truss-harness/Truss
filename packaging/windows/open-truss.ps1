@@ -2,7 +2,8 @@
 param(
   [string]$ServiceName = "Truss",
   [int]$Port = 7805,
-  [switch]$NoWait
+  [switch]$NoWait,
+  [switch]$NoLaunch
 )
 
 Set-StrictMode -Version Latest
@@ -18,7 +19,7 @@ function Test-TrussHealth {
       -TimeoutSec 1
 
     if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
-      Assert-TrussHealthUsesCurrentUserHome -Content $response.Content
+      Assert-TrussHealthUsesServiceHome -Content $response.Content
       return $true
     }
   } catch {
@@ -33,33 +34,28 @@ function Test-TrussHealth {
 }
 
 function Resolve-ExpectedTrussDatabasePath {
-  $userProfile = [Environment]::GetFolderPath("UserProfile")
-
-  if (-not $userProfile) {
-    $userProfile = $HOME
-  }
-
-  return (Join-Path (Join-Path $userProfile ".truss") "truss.db")
+  $programData = if ($env:ProgramData) { $env:ProgramData } else { "C:\ProgramData" }
+  return (Join-Path (Join-Path $programData "Truss") "truss.db")
 }
 
-function Assert-TrussHealthUsesCurrentUserHome {
+function Assert-TrussHealthUsesServiceHome {
   param([string]$Content)
 
   try {
     $payload = $Content | ConvertFrom-Json
     $databasePath = [string]$payload.session.conversationScope.databasePath
   } catch {
-    return
+    throw "Truss on port $Port is not the required global Truss Windows service. Stop the other process and start the Truss service."
   }
 
-  if (-not $databasePath) {
-    return
+  if ($payload.session.appName -ne "Truss" -or $payload.session.serviceMode -ne $true -or -not $databasePath) {
+    throw "Truss on port $Port is not the required global Truss Windows service. Stop the other process and start the Truss service."
   }
 
   $expectedDatabasePath = Resolve-ExpectedTrussDatabasePath
 
   if ($databasePath.TrimEnd("\") -ine $expectedDatabasePath.TrimEnd("\")) {
-    throw "Truss on port $Port is using $databasePath instead of $expectedDatabasePath. Stop the old machine-wide Truss service, then start Truss again."
+    throw "Truss on port $Port is not the required global Truss Windows service. Stop the other process and start the Truss service."
   }
 }
 
@@ -75,22 +71,6 @@ function Wait-ForTruss {
   }
 
   return $false
-}
-
-function Start-TrussProcessFallback {
-  param([int]$FallbackPort)
-
-  $trussExe = Join-Path $PSScriptRoot "truss.exe"
-
-  if (-not (Test-Path -LiteralPath $trussExe)) {
-    throw "Could not find $trussExe."
-  }
-
-  Start-Process `
-    -FilePath $trussExe `
-    -ArgumentList "spawn --no-autolaunch --port $FallbackPort" `
-    -WorkingDirectory $PSScriptRoot `
-    -WindowStyle Hidden
 }
 
 function Get-TrussServiceForCurrentInstall {
@@ -119,18 +99,20 @@ if (-not (Test-TrussHealth -HealthPort $Port)) {
       try {
         Start-Service -Name $ServiceName
       } catch {
-        if (-not (Test-TrussHealth -HealthPort $Port)) {
-          Start-TrussProcessFallback -FallbackPort $Port
-        }
+        throw "The required Truss Windows service could not be started. Start it from an elevated shell or reinstall Truss."
       }
     }
   } else {
-    Start-TrussProcessFallback -FallbackPort $Port
+    throw "The required Truss Windows service is not installed. Reinstall Truss from an elevated shell."
   }
 
   if (-not $NoWait) {
-    [void](Wait-ForTruss -HealthPort $Port)
+    if (-not (Wait-ForTruss -HealthPort $Port)) {
+      throw "The required Truss Windows service did not become ready on port $Port."
+    }
   }
 }
 
-Start-Process "http://127.0.0.1:$Port/"
+if (-not $NoLaunch) {
+  Start-Process "http://127.0.0.1:$Port/"
+}

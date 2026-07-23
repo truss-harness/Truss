@@ -22,10 +22,13 @@ describe("Playwright MCP settings", () => {
       const settings = new McpSettingsRepository(database.db);
 
       settings.ensureMcpSettings();
+      database.db
+        .query(
+          "UPDATE mcp_settings SET playwright_mcp_headless = 0, playwright_mcp_shared_browser = 0 WHERE id = 1",
+        )
+        .run();
       expect(settings.getMcpSettings().playwrightMcp).toEqual({
         enabled: false,
-        headless: true,
-        sharedBrowser: true,
         tools: "*",
       });
 
@@ -46,8 +49,6 @@ describe("Playwright MCP settings", () => {
       settings.updateMcpSettings({
         playwrightMcp: {
           enabled: true,
-          headless: false,
-          sharedBrowser: false,
           tools: "browser_navigate, browser_click",
         },
       });
@@ -67,9 +68,17 @@ describe("Playwright MCP settings", () => {
       expect(enabledServer?.args).toContain("truss-playwright-mcp");
       expect(settings.getMcpSettings().playwrightMcp).toMatchObject({
         enabled: true,
-        headless: false,
-        sharedBrowser: false,
         tools: "browser_navigate, browser_click",
+      });
+      expect(
+        database.db
+          .query(
+            "SELECT playwright_mcp_headless AS headless, playwright_mcp_shared_browser AS sharedBrowser FROM mcp_settings WHERE id = 1",
+          )
+          .get(),
+      ).toEqual({
+        headless: 0,
+        sharedBrowser: 0,
       });
     } finally {
       database?.db.close();

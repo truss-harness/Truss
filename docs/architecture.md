@@ -117,11 +117,17 @@ Truss features a specialized client-side parser (`src/client/markdown.tsx`) that
 
 ## 2. Stealth Browser, Task Scheduling, & Agentic Execution
 
-### 2.1 Bundled Camoufox Stealth Browser
-To perform web interaction without triggering automated anti-bot protections, Truss bundles `Camoufox` (`src/server/utils/camoufox-browser.ts`), an anti-detection browser engine based on Firefox and Playwright.
+### 2.1 Service-Owned Camoufox Stealth Browser
+On Windows, the mandatory global `LocalSystem` service owns one lazily launched,
+always-headless Camoufox. Managed browser MCP children use an authenticated
+loopback broker for page fetches, binary screenshots, and Playwright JSON-RPC
+forwarding. A random service capability is propagated only to service-launched
+workspace processes and managed browser MCP children. There is no process-local
+fallback, and other operating systems report that the Windows service is
+required.
 
-*   **Initialization & Provisioning:** On the first execution of a web tool, Truss:
-    1.  Downloads the specific pinned version of the Camoufox binary corresponding to the local host's OS platform (Windows, macOS, Linux) and architecture (x86_64, arm64) from GitHub release assets.
+*   **Initialization & Provisioning:** On the first brokered browser operation, the service:
+    1.  Uses the packaged or pinned Windows x64 Camoufox binary from the service-owned Truss home.
     2.  Downloads and caches the official `uBlock Origin` extension to block advertisements and tracker scripts, integrating it into the browser's startup policy directory.
 *   **Anti-Fingerprinting Capabilities:** Camoufox automatically spoof-modulates active fingerprint vectors:
     *   **TLS Fingerprints:** Emulates natural browser TLS handshake configurations.

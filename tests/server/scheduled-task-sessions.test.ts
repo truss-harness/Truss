@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { Database } from "bun:sqlite";
 import type { ServerContext } from "../../src/server/http/context.ts";
 import { handleScheduledTasksRoute } from "../../src/server/http/routes-scheduled-tasks.ts";
 import { handleAgentSessionsRoute } from "../../src/server/http/routes-agent-sessions.ts";
+import { ScheduledTasksRepository } from "../../src/server/storage/scheduled-tasks.ts";
 
 describe("scheduled task sessions", () => {
   it("lists the latest scheduled task run session via /api/scheduled-tasks/sessions", async () => {
@@ -40,6 +42,63 @@ describe("scheduled task sessions", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ sessions });
+  });
+
+  it("lists workspace-scoped task sessions without an ambiguous workspace path", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE scheduled_tasks (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        root_session_id TEXT,
+        workspace_path TEXT
+      );
+      CREATE TABLE agent_sessions (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        parent_session_id TEXT,
+        title TEXT,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        temperature REAL,
+        top_p REAL,
+        top_k INTEGER,
+        context_size INTEGER,
+        workspace_path TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE scheduled_task_runs (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        started_at TEXT NOT NULL
+      );
+    `);
+
+    db.query(`
+      INSERT INTO agent_sessions (
+        id, type, parent_session_id, title, provider_id, model_id, workspace_path, created_at, updated_at
+      ) VALUES
+        ('root_workspace_a', 'agentic', NULL, 'Root', 'openai', 'gpt-4', '/workspace-a', '2026-07-15T10:00:00.000Z', '2026-07-15T10:00:00.000Z'),
+        ('child_workspace_a', 'sub-agent', 'root_workspace_a', 'Task run', 'openai', 'gpt-4', '/workspace-a', '2026-07-15T11:00:00.000Z', '2026-07-15T11:00:00.000Z'),
+        ('root_workspace_b', 'agentic', NULL, 'Root', 'openai', 'gpt-4', '/workspace-b', '2026-07-15T10:00:00.000Z', '2026-07-15T10:00:00.000Z'),
+        ('child_workspace_b', 'sub-agent', 'root_workspace_b', 'Task run', 'openai', 'gpt-4', '/workspace-b', '2026-07-15T12:00:00.000Z', '2026-07-15T12:00:00.000Z');
+    `).run();
+    db.query(`
+      INSERT INTO scheduled_tasks (id, name, root_session_id, workspace_path) VALUES
+        ('task_workspace_a', 'Workspace A task', 'root_workspace_a', '/workspace-a'),
+        ('task_workspace_b', 'Workspace B task', 'root_workspace_b', '/workspace-b');
+    `).run();
+
+    const sessions = new ScheduledTasksRepository(db, { workspacePath: "/workspace-a" })
+      .listScheduledTaskSessions();
+
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({
+      id: "child_workspace_a",
+      taskId: "task_workspace_a",
+      workspacePath: "/workspace-a",
+    });
   });
 
   it("copies an automatic task into an independent conversation", async () => {

@@ -44,6 +44,12 @@ import { getSystemPromptDefaults } from "../prompts/system-prompts.ts";
 import { createId } from "../utils/id.ts";
 import { now } from "../utils/time.ts";
 import {
+  browserBrokerCredentialEnv,
+  browserBrokerTokenEnv,
+  browserBrokerUrlEnv,
+  type BrowserBrokerCredentials,
+} from "../browser/broker-protocol.ts";
+import {
   readStoredFileAccessSettings,
   writeStoredFileAccessSettings,
 } from "../security/file-access.ts";
@@ -55,12 +61,14 @@ import type {
 } from "../../shared/protocol.ts";
 
 export interface ServerOptions {
+  browserBroker?: BrowserBrokerCredentials;
   port?: number;
   projectRoot: string;
   publicDir: string;
   conversationWorkspacePath: string | null;
   trussHome: TrussHome;
   workspacePath: string;
+  serviceMode?: boolean;
 }
 
 export interface ServerContext {
@@ -165,9 +173,16 @@ export async function createServerContext(options: ServerOptions): Promise<Serve
     });
   };
 
-  const createCurrentMcpRuntime = () =>
-    createMcpRuntime({
-      env: secretEnv.mergedWithProcessEnv(),
+  const createCurrentMcpRuntime = () => {
+    const env = secretEnv.mergedWithProcessEnv();
+
+    delete env[browserBrokerUrlEnv];
+    delete env[browserBrokerTokenEnv];
+    return createMcpRuntime({
+      env,
+      managedBrowserEnv: options.browserBroker
+        ? browserBrokerCredentialEnv(options.browserBroker)
+        : undefined,
       onSummaryChange: publishMcpSummary,
       onOrchestrationTimerFired: (event) => handleOrchestrationTimerFired(context, event),
       projectRoot: options.projectRoot,
@@ -177,6 +192,7 @@ export async function createServerContext(options: ServerOptions): Promise<Serve
       filesystemGrants,
       mcpSettings,
     });
+  };
 
   const [mcp, discoveredSkills] = await Promise.all([
     createCurrentMcpRuntime(),
@@ -216,18 +232,8 @@ export async function createServerContext(options: ServerOptions): Promise<Serve
     richFeatures,
     reloadMcpRuntime: async () => {
       secretEnv.load();
-      const nextMcp = await createCurrentMcpRuntime();
-      const previousMcp = context.mcp;
-
+      const nextMcp = await replaceMcpRuntime(context.mcp, createCurrentMcpRuntime);
       context.mcp = nextMcp;
-      await nextMcp.waitUntilSettled();
-
-      try {
-        await previousMcp.close();
-      } catch (caught) {
-        console.warn("Failed to close previous MCP runtime:", caught);
-      }
-
       return nextMcp.summary;
     },
     scheduledTasks,
@@ -251,6 +257,21 @@ export async function createServerContext(options: ServerOptions): Promise<Serve
   context.scheduledTaskScheduler.sync();
 
   return context;
+}
+
+export async function replaceMcpRuntime<T extends { close(): Promise<void> }>(
+  previousMcp: T,
+  createNextMcp: () => Promise<T>,
+): Promise<T> {
+  const nextMcp = await createNextMcp();
+
+  try {
+    await previousMcp.close();
+  } catch (caught) {
+    console.warn("Failed to close previous MCP runtime:", caught);
+  }
+
+  return nextMcp;
 }
 
 async function migrateLegacyFileAccessDirectories({

@@ -3,9 +3,24 @@ import { routeRequest } from "./router.ts";
 import { SpawnLifecycle } from "./spawn-lifecycle.ts";
 import { defaultServerPort, serverPortCandidates } from "../ports.ts";
 import type { ServerOptions } from "./context.ts";
+import { BrowserBrokerServer, CamoufoxBrokerHost } from "../browser/broker-server.ts";
 
 export async function startServer(options: ServerOptions): Promise<Bun.Server<undefined>> {
-  const context = await createServerContext(options);
+  const browserBroker = shouldStartBrowserBroker(options)
+    ? BrowserBrokerServer.start({
+        host: new CamoufoxBrokerHost({
+          env: process.env,
+          trussHomeDir: options.trussHome.dir,
+        }),
+      })
+    : null;
+  const effectiveOptions = browserBroker
+    ? { ...options, browserBroker: browserBroker.credentials }
+    : options;
+  const context = await createServerContext(effectiveOptions).catch(async (caught) => {
+    await browserBroker?.close();
+    throw caught;
+  });
   let server: Bun.Server<undefined> | undefined;
 
   for (const port of serverPortCandidates(options.port)) {
@@ -26,7 +41,14 @@ export async function startServer(options: ServerOptions): Promise<Bun.Server<un
       }
 
       const lifecycle = new SpawnLifecycle({
-        closeMcp: () => context.mcp.close(),
+        closeMcp: async () => {
+          try {
+            await context.mcp.close();
+          } finally {
+            await browserBroker?.close();
+          }
+        },
+        idleTimeoutMs: options.serviceMode ? null : undefined,
         onStopped: () => {
           context.scheduledTaskScheduler.stop();
           context.database.db.close();
@@ -42,12 +64,30 @@ export async function startServer(options: ServerOptions): Promise<Bun.Server<un
       return runningServer;
     } catch (caught) {
       if (options.port !== undefined || port !== defaultServerPort || !isAddressInUseError(caught)) {
+        await context.mcp.close().catch(() => undefined);
+        await browserBroker?.close();
+        context.scheduledTaskScheduler.stop();
+        context.database.db.close();
         throw caught;
       }
     }
   }
 
+  await context.mcp.close().catch(() => undefined);
+  await browserBroker?.close();
+  context.scheduledTaskScheduler.stop();
+  context.database.db.close();
   throw new Error("Could not start Truss server.");
+}
+
+export function shouldStartBrowserBroker(options: Pick<
+  ServerOptions,
+  "browserBroker" | "conversationWorkspacePath" | "serviceMode"
+>): boolean {
+  return (
+    options.serviceMode === true ||
+    (options.conversationWorkspacePath === null && options.browserBroker === undefined)
+  );
 }
 
 function isAddressInUseError(caught: unknown): boolean {

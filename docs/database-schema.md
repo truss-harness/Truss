@@ -106,9 +106,9 @@ Stores singleton preferences for bundled MCP tools.
 | `command_runner_risky_action` | `TEXT` | `NOT NULL DEFAULT 'ask'`, `CHECK (command_runner_risky_action IN (...))` | Guard action for commands classified as risky. |
 | `command_runner_dangerous_action` | `TEXT` | `NOT NULL DEFAULT 'ask'`, `CHECK (command_runner_dangerous_action IN (...))` | Guard action for commands classified as dangerous. |
 | `playwright_mcp_enabled` | `INTEGER` | `NOT NULL DEFAULT 0`, `CHECK (playwright_mcp_enabled IN (0, 1))` | Whether the managed `truss-playwright-mcp` entry is active. |
-| `playwright_mcp_headless` | `INTEGER` | `NOT NULL DEFAULT 1`, `CHECK (playwright_mcp_headless IN (0, 1))` | Whether the Playwright Browser MCP Camoufox launcher runs headless. |
+| `playwright_mcp_headless` | `INTEGER` | `NOT NULL DEFAULT 1`, `CHECK (playwright_mcp_headless IN (0, 1))` | Legacy compatibility column; retained for existing databases but no longer read or exposed. Camoufox is always headless. |
 | `playwright_mcp_tools` | `TEXT` | `NOT NULL DEFAULT '*'` | Comma/newline allowlist of upstream Playwright MCP tool names; `*` exposes all. |
-| `playwright_mcp_shared_browser` | `INTEGER` | `NOT NULL DEFAULT 1`, `CHECK (playwright_mcp_shared_browser IN (0, 1))` | Whether the runtime uses Truss's process-local shared Camoufox lease. |
+| `playwright_mcp_shared_browser` | `INTEGER` | `NOT NULL DEFAULT 1`, `CHECK (playwright_mcp_shared_browser IN (0, 1))` | Legacy compatibility column retained but no longer read or exposed. The service owns the only browser. |
 | `created_at` | `TEXT` | `NOT NULL` | ISO timestamp. |
 | `updated_at` | `TEXT` | `NOT NULL` | ISO timestamp. |
 
@@ -339,7 +339,7 @@ Columns intentionally not indexed:
 - Optional personalization fields such as `nickname`, `preferred_language`, `location`, and `model_catalog_url`, because they are read from one singleton row.
 - AI behaviour booleans and limits such as `include_thinking_history`, `include_tool_history`, and `limit_reasoning_budget`, because they are read from one singleton row.
 - Rich feature booleans and PlantUML text settings, because they are read from one singleton row.
-- MCP singleton booleans and allowlist text such as `playwright_mcp_enabled`, `playwright_mcp_headless`, `playwright_mcp_shared_browser`, and `playwright_mcp_tools`, because they are read from one singleton row.
+- Active MCP singleton settings such as `playwright_mcp_enabled` and `playwright_mcp_tools`, because they are read from one singleton row. The legacy headless/shared-browser columns are intentionally unused.
 
 ## Migration History
 

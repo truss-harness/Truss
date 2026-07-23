@@ -21,6 +21,16 @@ describe("parseCli", () => {
     expect(parseCli(["spawn", "--no-open"], cwd).openBrowser).toBe(false);
   });
 
+  it("parses the fixed-port Windows service runtime", () => {
+    expect(parseCli(["service"], cwd)).toEqual({
+      command: "service",
+      openBrowser: false,
+      port: 7805,
+      workspacePath: cwd,
+      workspacePathSpecified: false,
+    });
+  });
+
   it("parses workspace and inline port arguments without treating flags as paths", () => {
     const options = parseCli(["spawn", "fixtures/demo", "--port=17771", "--no-open"], cwd);
 

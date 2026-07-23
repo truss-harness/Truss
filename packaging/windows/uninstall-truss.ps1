@@ -17,11 +17,11 @@ function Test-IsAdministrator {
 }
 
 function Resolve-DefaultInstallDir {
-  if ($env:LOCALAPPDATA) {
-    return (Join-Path $env:LOCALAPPDATA "Programs\Truss")
+  if ($env:ProgramFiles) {
+    return (Join-Path $env:ProgramFiles "Truss")
   }
 
-  return (Join-Path $HOME "AppData\Local\Programs\Truss")
+  return "C:\Program Files\Truss"
 }
 
 function Remove-UserPathEntry {
@@ -168,4 +168,4 @@ if ($RemoveFiles -and -not $KeepFiles -and (Test-Path -LiteralPath $InstallDir))
   Remove-InstallDirectoryLater -TargetDir $InstallDir
 }
 
-Write-Host "Truss PATH entry, Start Menu shortcuts, tray autostart, and optional service were removed."
+Write-Host "Truss PATH entry, Start Menu shortcuts, tray autostart, and Windows service were removed."

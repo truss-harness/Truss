@@ -11,7 +11,7 @@ export type BuiltinMcpServerName =
 
 export interface CliOptions {
   allowedDirectories?: string[];
-  command: "mcp-server" | "spawn" | "help";
+  command: "mcp-server" | "service" | "spawn" | "help";
   conversationWorkspacePath?: string;
   mcpServer?: BuiltinMcpServerName;
   openBrowser: boolean;
@@ -58,18 +58,30 @@ export function parseCli(args: string[], cwd: string): CliOptions {
     };
   }
 
+  if (command === "service") {
+    return {
+      command: "service",
+      openBrowser: false,
+      port: defaultServerPort,
+      workspacePath: cwd,
+      workspacePathSpecified: false,
+    };
+  }
+
   if (command !== "spawn") {
     throw new Error(`Unknown command "${command}". Run "truss help" for usage.`);
   }
 
   const openBrowser = !args.some(isNoOpenFlag);
   const port = readPort(args);
+  const trussHomeDir = readFlagValue(args, "--truss-home");
   const workspaceArg = readWorkspaceArg(args);
 
   return {
     command: "spawn",
     openBrowser,
     port,
+    ...(trussHomeDir ? { trussHomeDir } : {}),
     workspacePath: resolve(cwd, workspaceArg ?? "."),
     workspacePathSpecified: workspaceArg !== undefined,
   };
@@ -79,6 +91,7 @@ export function printHelp(): void {
   console.log(`Truss local agentic harness
 
 Usage:
+  truss service
   truss spawn [workspace path] [--port <number>] [--no-open|--no-autolaunch]
   truss mcp-server truss-web-tools [--truss-home <path>]
   truss mcp-server truss-playwright-mcp [--truss-home <path>]

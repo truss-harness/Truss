@@ -9,11 +9,9 @@ import { openAppDatabase, type AppDatabase } from "../../../storage/database.ts"
 import { ModelProfilesRepository } from "../../../storage/model-profiles.ts";
 import { SettingsRepository } from "../../../storage/settings.ts";
 import type { TrussWebToolRuntime } from "../../../tools/truss-web-tools.ts";
-import {
-  acquireCamoufoxBrowser,
-  type CamoufoxBrowser,
-  type CamoufoxBrowserLease,
-} from "../../../utils/camoufox-browser.ts";
+import { connectCamoufoxBrowserBroker } from "../../../browser/broker-client.ts";
+import type { CamoufoxBrowser } from "../../../utils/camoufox-browser.ts";
+import { clearBrowserBrokerCredentialsFromEnv } from "../../../browser/broker-protocol.ts";
 
 export interface TrussWebToolsMcpRuntime {
   close(): Promise<void>;
@@ -43,17 +41,13 @@ export async function createTrussWebToolsMcpRuntime(
   settings.ensureLlmProviders(getLlmProviderSettingsDefaults());
   modelProfiles.ensureModelProfiles(getLlmModelProfileDefaults());
 
-  let browser: CamoufoxBrowser | null = null;
-  let browserLease: CamoufoxBrowserLease | null = null;
+  let browser: CamoufoxBrowser;
 
   try {
-    browserLease = await acquireCamoufoxBrowser({
-      env: secretEnv.mergedWithProcessEnv(),
-      log,
-      shared: true,
-      trussHomeDir: trussHome.dir,
+    browser = await connectCamoufoxBrowserBroker({
+      env: process.env,
     });
-    browser = browserLease.browser;
+    clearBrowserBrokerCredentialsFromEnv(process.env);
   } catch (caught) {
     closeDatabase(database);
     throw caught;
@@ -62,7 +56,7 @@ export async function createTrussWebToolsMcpRuntime(
   return {
     close: async () => {
       try {
-        await browserLease?.close();
+        await browser.close();
       } finally {
         closeDatabase(database);
       }

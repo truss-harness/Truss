@@ -3,9 +3,7 @@ param(
   [string]$InstallDir = "",
   [string]$PackageRoot = $PSScriptRoot,
   [string]$ServiceName = "Truss",
-  [switch]$InstallService,
   [switch]$SkipFileCopy,
-  [switch]$NoService,
   [switch]$NoTrayAutostart
 )
 
@@ -20,11 +18,11 @@ function Test-IsAdministrator {
 }
 
 function Resolve-DefaultInstallDir {
-  if ($env:LOCALAPPDATA) {
-    return (Join-Path $env:LOCALAPPDATA "Programs\Truss")
+  if ($env:ProgramFiles) {
+    return (Join-Path $env:ProgramFiles "Truss")
   }
 
-  return (Join-Path $HOME "AppData\Local\Programs\Truss")
+  return "C:\Program Files\Truss"
 }
 
 function Copy-TrussPackage {
@@ -163,21 +161,6 @@ function Remove-TrussService {
   }
 }
 
-function Remove-ConflictingMachineService {
-  $serviceInfo = Get-TrussServiceInfo
-
-  if (-not $serviceInfo) {
-    return
-  }
-
-  if (-not (Test-IsAdministrator)) {
-    throw "A machine-wide Truss service is already installed as $($serviceInfo.StartName). Uninstall it from an elevated PowerShell session before installing Truss for the current user."
-  }
-
-  Write-Warning "Removing existing machine-wide Truss service before installing the per-user package."
-  Remove-TrussService -ServiceInfo $serviceInfo
-}
-
 function Install-TrussService {
   param([string]$TargetDir)
 
@@ -205,6 +188,10 @@ function Install-TrussService {
   }
 
   Set-Service -Name $ServiceName -StartupType Automatic
+  $installedService = Get-TrussServiceInfo
+  if (-not $installedService -or [string]$installedService.StartName -ine "LocalSystem") {
+    throw "The $ServiceName service must run as LocalSystem."
+  }
   Start-Service -Name $ServiceName
 }
 
@@ -295,16 +282,8 @@ if (-not $InstallDir) {
   $InstallDir = Resolve-DefaultInstallDir
 }
 
-if ($NoService) {
-  $InstallService = $false
-}
-
-if ($InstallService -and -not (Test-IsAdministrator)) {
-  throw "Run this installer from an elevated PowerShell session when using -InstallService."
-}
-
-if (-not $InstallService) {
-  Remove-ConflictingMachineService
+if (-not (Test-IsAdministrator)) {
+  throw "Run this installer from an elevated PowerShell session. The LocalSystem Truss service is required."
 }
 
 if (-not $SkipFileCopy) {
@@ -313,9 +292,7 @@ if (-not $SkipFileCopy) {
 
 New-Item -ItemType Directory -Path (Join-Path $InstallDir "logs") -Force | Out-Null
 
-if ($InstallService) {
-  Install-TrussService -TargetDir $InstallDir
-}
+Install-TrussService -TargetDir $InstallDir
 
 Add-UserPathEntry -Entry $InstallDir
 Install-TrussShortcuts -TargetDir $InstallDir
@@ -326,6 +303,7 @@ if (-not $NoTrayAutostart) {
 }
 
 Write-Host "Truss installed to $InstallDir."
+Write-Host "The required LocalSystem Truss service is installed and started."
 Write-Host "The truss command is available for the current user after opening a new terminal."
 Write-Host "Open the main view from Start Menu > Truss > Truss or the tray icon."
 Write-Host "Right-click any folder or empty folder background to spawn a Truss agent there."

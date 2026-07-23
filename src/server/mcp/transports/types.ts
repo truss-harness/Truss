@@ -15,4 +15,5 @@ export interface McpTransportFactory {
 
 export interface McpTransportOptions {
   env: NodeJS.ProcessEnv;
+  managedBrowserEnv?: NodeJS.ProcessEnv;
 }

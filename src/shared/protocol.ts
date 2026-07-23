@@ -24,6 +24,7 @@ export type AgentRole = "system" | "user" | "assistant";
 
 export interface SessionInfo {
   appName: "Truss";
+  serviceMode: boolean;
   port: number;
   workspacePath: string;
   conversationScope: ConversationScopeSummary;
@@ -328,8 +329,6 @@ export interface McpSettingsSummary {
 
 export interface PlaywrightMcpSettingsSummary {
   enabled: boolean;
-  headless: boolean;
-  sharedBrowser: boolean;
   tools: string;
 }
 

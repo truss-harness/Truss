@@ -390,6 +390,7 @@ function createCurrentSession(context: ServerContext, port: number): SessionInfo
     modelProfiles: context.getModelProfiles(),
     mcp: context.mcp.summary,
     port,
+    serviceMode: context.options.serviceMode === true,
     setup: context.setup.getSetup(),
     skills: context.skills,
     startedAt: context.startedAt,

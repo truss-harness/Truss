@@ -13,6 +13,7 @@ export interface SessionSnapshotOptions {
   mcp: McpDiscoverySummary;
   setup: FirstRunSetupSummary;
   port: number;
+  serviceMode: boolean;
   skills: SkillDiscoverySummary;
   startedAt: string;
   databasePath: string;
@@ -23,6 +24,7 @@ export interface SessionSnapshotOptions {
 export function createSessionSnapshot(options: SessionSnapshotOptions): SessionInfo {
   return {
     appName: "Truss",
+    serviceMode: options.serviceMode,
     workspacePath: options.workspacePath,
     conversationScope: {
       databasePath: options.databasePath,

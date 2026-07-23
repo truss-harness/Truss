@@ -1,15 +1,12 @@
-import { SecretEnvStore } from "../../../config/env.ts";
 import { ensureTrussHome } from "../../../setup/truss-home.ts";
 import { openAppDatabase, type AppDatabase } from "../../../storage/database.ts";
 import {
   defaultPlaywrightMcpSettings,
   McpSettingsRepository,
 } from "../../../storage/mcp-settings.ts";
-import {
-  acquireCamoufoxBrowser,
-  type CamoufoxBrowser,
-  type CamoufoxBrowserLease,
-} from "../../../utils/camoufox-browser.ts";
+import { connectCamoufoxBrowserBroker } from "../../../browser/broker-client.ts";
+import type { CamoufoxBrowser } from "../../../utils/camoufox-browser.ts";
+import { clearBrowserBrokerCredentialsFromEnv } from "../../../browser/broker-protocol.ts";
 import type { PlaywrightMcpSettingsSummary } from "../../../../shared/protocol.ts";
 
 export interface TrussPlaywrightMcpRuntime {
@@ -31,41 +28,24 @@ export async function createTrussPlaywrightMcpRuntime(
   });
   const database = openAppDatabase(trussHome.dbPath);
   const mcpSettings = new McpSettingsRepository(database.db);
-  const secretEnv = new SecretEnvStore({
-    envPath: trussHome.envPath,
-    envKeysPath: trussHome.envKeysPath,
-  });
   const log = (channel: string, message: string, metadata?: Record<string, unknown>) => {
     const details = metadata ? ` ${safeJson(metadata)}` : "";
 
     console.error(`[${channel}] ${message}${details}`);
   };
 
-  secretEnv.load();
   mcpSettings.ensureMcpSettings();
 
   const settings = mcpSettings.getMcpSettings().playwrightMcp ?? {
     ...defaultPlaywrightMcpSettings,
   };
-  let browser: CamoufoxBrowser | null = null;
-  let browserLease: CamoufoxBrowserLease | null = null;
+  let browser: CamoufoxBrowser;
 
   try {
-    if (settings.enabled) {
-      const env = {
-        ...secretEnv.mergedWithProcessEnv(),
-        TRUSS_CAMOUFOX_CHILD_HEADLESS: settings.headless ? "true" : "false",
-        TRUSS_CAMOUFOX_HEADLESS: settings.headless ? "true" : "false",
-      };
-
-      browserLease = await acquireCamoufoxBrowser({
-        env,
-        log,
-        shared: settings.sharedBrowser,
-        trussHomeDir: trussHome.dir,
-      });
-      browser = browserLease.browser;
-    }
+    browser = await connectCamoufoxBrowserBroker({
+      env: process.env,
+    });
+    clearBrowserBrokerCredentialsFromEnv(process.env);
   } catch (caught) {
     closeDatabase(database);
     throw caught;
@@ -74,7 +54,7 @@ export async function createTrussPlaywrightMcpRuntime(
   return {
     close: async () => {
       try {
-        await browserLease?.close();
+        await browser.close();
       } finally {
         closeDatabase(database);
       }

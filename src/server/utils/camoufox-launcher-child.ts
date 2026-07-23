@@ -17,7 +17,7 @@ async function main() {
 
   const browser = await firefox.launch({
     executablePath,
-    headless: process.env.TRUSS_CAMOUFOX_CHILD_HEADLESS !== "false",
+    headless: true,
     timeout: Number.isFinite(timeout) ? timeout : 180000,
     env: Object.fromEntries(
       Object.entries(process.env).filter(([key, value]) => (
@@ -417,7 +417,7 @@ async function main() {
       const { createConnection } = await import("@playwright/mcp");
       const transport = createPlaywrightMcpTransport();
       const connection = await createConnection(
-        { browser: { browserName: "firefox", contextOptions: defaultContextOptions(), launchOptions: { headless: process.env.TRUSS_CAMOUFOX_CHILD_HEADLESS !== "false" } } },
+        { browser: { browserName: "firefox", contextOptions: defaultContextOptions(), launchOptions: { headless: true } } },
         createPlaywrightMcpContext,
       );
       connection.server.onerror = (error: any) => {

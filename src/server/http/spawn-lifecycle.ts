@@ -7,6 +7,7 @@ export const spawnIdleTimeoutMs = 60 * 60 * 1000;
 
 export interface SpawnLifecycleOptions {
   closeMcp(): Promise<void>;
+  idleTimeoutMs?: number | null;
   onStopped(): void;
   port: number;
   processes: SpawnedProcessesRepository;
@@ -17,6 +18,7 @@ export interface SpawnLifecycleOptions {
 export class SpawnLifecycle {
   readonly #id = createId("spawn");
   readonly #closeMcp: () => Promise<void>;
+  readonly #idleTimeoutMs: number | null;
   readonly #onStopped: () => void;
   readonly #port: number;
   readonly #processes: SpawnedProcessesRepository;
@@ -29,6 +31,9 @@ export class SpawnLifecycle {
 
   constructor(options: SpawnLifecycleOptions) {
     this.#closeMcp = options.closeMcp;
+    this.#idleTimeoutMs = options.idleTimeoutMs === undefined
+      ? spawnIdleTimeoutMs
+      : options.idleTimeoutMs;
     this.#onStopped = options.onStopped;
     this.#port = options.port;
     this.#processes = options.processes;
@@ -77,13 +82,17 @@ export class SpawnLifecycle {
   }
 
   #resetIdleTimer(): void {
+    if (this.#idleTimeoutMs === null) {
+      return;
+    }
+
     if (this.#idleTimer) {
       clearTimeout(this.#idleTimer);
     }
 
     this.#idleTimer = setTimeout(() => {
       void this.stop();
-    }, spawnIdleTimeoutMs);
+    }, this.#idleTimeoutMs);
   }
 
   async #stop(): Promise<void> {

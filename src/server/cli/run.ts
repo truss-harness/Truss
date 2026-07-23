@@ -1,5 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { userInfo } from "node:os";
 import process from "node:process";
 import { openDefaultBrowser } from "./browser.ts";
 import { parseCli, printHelp } from "./parse.ts";
@@ -10,6 +11,10 @@ import { runTrussFilesystemToolsMcpServer } from "../mcp/servers/truss-filesyste
 import { runTrussOrchestrationToolsMcpServer } from "../mcp/servers/truss-orchestration-tools/server.ts";
 import { runTrussPlaywrightMcpServer } from "../mcp/servers/truss-playwright-mcp/server.ts";
 import { runTrussWebToolsMcpServer } from "../mcp/servers/truss-web-tools/server.ts";
+import {
+  browserBrokerCredentialsFromEnv,
+  clearBrowserBrokerCredentialsFromEnv,
+} from "../browser/broker-protocol.ts";
 
 export interface CliRuntime {
   args: string[];
@@ -71,7 +76,21 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
     return;
   }
 
-  const trussHome = await ensureTrussHome();
+  if (cli.command === "service" && process.platform !== "win32") {
+    throw new Error("The global Truss browser service is supported only on Windows.");
+  }
+
+  if (cli.command === "service" && !isLocalSystemAccount()) {
+    throw new Error(
+      'The "truss service" runtime must be started by the installed LocalSystem Windows service.',
+    );
+  }
+
+  const inheritedBrowserBroker =
+    cli.command === "spawn" ? takeInheritedBrowserBrokerCredentials() : null;
+  const trussHome = await ensureTrussHome(
+    cli.command === "service" ? resolveWindowsServiceTrussHome() : cli.trussHomeDir,
+  );
   const workspacePath = await resolveWorkspaceDirectory(cli.workspacePath);
   const conversationWorkspacePath = cli.workspacePathSpecified ? workspacePath : null;
   const { startServer } = await import("../http/server.ts");
@@ -81,12 +100,14 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
   }
 
   const server = await startServer({
+    browserBroker: inheritedBrowserBroker ?? undefined,
     port: cli.port,
     conversationWorkspacePath,
     projectRoot: runtime.projectRoot,
     publicDir: resolve(runtime.projectRoot, "public"),
     trussHome,
     workspacePath,
+    serviceMode: cli.command === "service",
   });
 
   const url = `http://${server.hostname}:${server.port}`;
@@ -100,6 +121,32 @@ export async function runCli(runtime: CliRuntime): Promise<void> {
 
   if (cli.openBrowser) {
     openDefaultBrowser(url);
+  }
+}
+
+function takeInheritedBrowserBrokerCredentials() {
+  const credentials = browserBrokerCredentialsFromEnv(process.env);
+
+  clearBrowserBrokerCredentialsFromEnv(process.env);
+  return credentials;
+}
+
+function resolveWindowsServiceTrussHome(): string {
+  const configured = process.env.TRUSS_SERVICE_HOME?.trim();
+
+  if (configured) {
+    return resolve(configured);
+  }
+
+  const programData = process.env.ProgramData?.trim() || "C:\\ProgramData";
+  return join(programData, "Truss");
+}
+
+function isLocalSystemAccount(): boolean {
+  try {
+    return userInfo().username.toUpperCase() === "SYSTEM";
+  } catch {
+    return process.env.USERNAME?.toUpperCase() === "SYSTEM";
   }
 }
 

@@ -12,7 +12,7 @@ This file tracks third-party libraries and external attribution requirements use
 | `adm-zip` | `0.5.17` | MIT | Extracts the app-managed Camoufox browser archive for Truss Web Tools. |
 | `playwright-core` | `1.53.0` | Apache-2.0 | Launches and controls the app-managed Camoufox browser used by Truss Web Tools. |
 | `react-easy-crop` | `6.0.2` | MIT | Provides the interactive image cropper in transcript attachment previews. |
-| WinSW | `2.12.0` | MIT | Supports optional Windows service-mode installs for the compiled `truss.exe`. |
+| WinSW | `2.12.0` | MIT | Hosts the mandatory global `LocalSystem` Truss Windows service. |
 
 ## External Services And Data
 

@@ -1,10 +1,14 @@
 <service>
   <id>Truss</id>
   <name>Truss</name>
-  <description>Truss localhost agentic harness.</description>
+  <description>Truss localhost agentic harness and global headless browser broker.</description>
   <executable>%BASE%\truss.exe</executable>
-  <arguments>spawn --no-autolaunch --port 7805</arguments>
+  <arguments>service</arguments>
   <workingdirectory>%BASE%</workingdirectory>
+  <env name="TRUSS_SERVICE_HOME" value="%ProgramData%\Truss" />
+  <serviceaccount>
+    <user>LocalSystem</user>
+  </serviceaccount>
   <startmode>Automatic</startmode>
   <onfailure action="restart" delay="10 sec" />
   <logpath>%BASE%\logs</logpath>

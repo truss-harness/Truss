@@ -81,15 +81,6 @@ export interface CamoufoxBrowserOptions {
   trussHomeDir?: string;
 }
 
-export interface CamoufoxBrowserLease {
-  browser: CamoufoxBrowser;
-  close(): Promise<void>;
-}
-
-export interface SharedCamoufoxBrowserOptions extends CamoufoxBrowserOptions {
-  shared?: boolean;
-}
-
 interface CamoufoxInstallInfo {
   assetName: string;
   downloadedAt: string;
@@ -119,12 +110,6 @@ interface CamoufoxLauncherServer {
 interface CamoufoxNodeCommand {
   args: string[];
   command: string;
-}
-
-interface SharedCamoufoxBrowserState {
-  browser: CamoufoxBrowser | null;
-  launchPromise: Promise<CamoufoxBrowser>;
-  refCount: number;
 }
 
 const defaultStartTimeoutMs = 180_000;
@@ -159,7 +144,6 @@ const camoufoxRepoApi = "https://api.github.com/repos/daijro/camoufox";
 const installInfoFileName = "truss-camoufox.json";
 const addonInstallInfoFileName = "truss-camoufox-addon.json";
 const launcherShutdownTimeoutMs = 5_000;
-const sharedCamoufoxBrowsers = new Map<string, SharedCamoufoxBrowserState>();
 export const camoufoxLauncherChildScript = `
 async function main() {
   const { createInterface } = await import("node:readline");
@@ -181,7 +165,7 @@ async function main() {
 
   const browser = await firefox.launch({
     executablePath,
-    headless: process.env.TRUSS_CAMOUFOX_CHILD_HEADLESS !== "false",
+    headless: true,
     timeout: Number.isFinite(timeout) ? timeout : 180000,
     env: Object.fromEntries(
       Object.entries(process.env).filter(([key, value]) => (
@@ -802,7 +786,7 @@ async function main() {
             browserName: "firefox",
             contextOptions: defaultContextOptions(),
             launchOptions: {
-              headless: process.env.TRUSS_CAMOUFOX_CHILD_HEADLESS !== "false",
+              headless: true,
             },
           },
         },
@@ -1054,7 +1038,7 @@ export async function launchCamoufoxBrowser({
     log,
     trussHomeDir,
   });
-  const headless = resolveCamoufoxHeadless(env);
+  const headless = true;
   const requestTimeoutMs = resolveCamoufoxRequestTimeoutMs(env);
 
   log("browser", "Starting bundled Camoufox browser.", {
@@ -1081,76 +1065,6 @@ export async function launchCamoufoxBrowser({
     requestTimeoutMs: requestTimeoutMs + childRequestTimeoutPaddingMs,
     trussHomeDir,
   });
-}
-
-export async function acquireCamoufoxBrowser({
-  shared = false,
-  ...options
-}: SharedCamoufoxBrowserOptions = {}): Promise<CamoufoxBrowserLease> {
-  if (!shared) {
-    const browser = await launchCamoufoxBrowser(options);
-
-    return {
-      browser,
-      close: () => browser.close(),
-    };
-  }
-
-  const key = sharedCamoufoxBrowserKey(options);
-  let state = sharedCamoufoxBrowsers.get(key);
-
-  if (!state) {
-    state = {
-      browser: null,
-      launchPromise: launchCamoufoxBrowser(options),
-      refCount: 0,
-    };
-    sharedCamoufoxBrowsers.set(key, state);
-    state.launchPromise
-      .then((browser) => {
-        state!.browser = browser;
-      })
-      .catch(() => {
-        if (sharedCamoufoxBrowsers.get(key) === state) {
-          sharedCamoufoxBrowsers.delete(key);
-        }
-      });
-  }
-
-  state.refCount += 1;
-
-  try {
-    const browser = await state.launchPromise;
-    let closed = false;
-
-    return {
-      browser,
-      close: async () => {
-        if (closed) {
-          return;
-        }
-
-        closed = true;
-        const current = sharedCamoufoxBrowsers.get(key);
-
-        if (!current) {
-          return;
-        }
-
-        current.refCount = Math.max(0, current.refCount - 1);
-
-        if (current.refCount > 0) {
-          return;
-        }
-
-        sharedCamoufoxBrowsers.delete(key);
-        await (current.browser ?? browser).close();
-      },
-    };
-  } catch (caught) {
-    state.refCount = Math.max(0, state.refCount - 1);
-    throw caught;
-  }
 }
 
 class ConnectedCamoufoxBrowser implements CamoufoxBrowser {
@@ -1910,6 +1824,9 @@ async function startCamoufoxLauncherServer({
 
 function camoufoxNodeCommands(env: NodeJS.ProcessEnv): CamoufoxNodeCommand[] {
   const configured = env.TRUSS_CAMOUFOX_NODE?.trim();
+  const bundledNodePath = isStandaloneRuntime()
+    ? join(dirname(process.execPath), "node.exe")
+    : null;
 
   const candidateBundledLauncherPaths = [];
   if (isStandaloneRuntime()) {
@@ -1940,15 +1857,9 @@ function camoufoxNodeCommands(env: NodeJS.ProcessEnv): CamoufoxNodeCommand[] {
   return [
     {
       args,
-      command: "node",
+      command: bundledNodePath && existsSync(bundledNodePath) ? bundledNodePath : "node",
     },
   ];
-}
-
-export function resolveCamoufoxHeadless(env: NodeJS.ProcessEnv): boolean {
-  const configured = env.TRUSS_CAMOUFOX_CHILD_HEADLESS ?? env.TRUSS_CAMOUFOX_HEADLESS;
-
-  return !envFlagIsFalse(configured);
 }
 
 function resolveCamoufoxRequestTimeoutMs(env: NodeJS.ProcessEnv): number {
@@ -1959,10 +1870,6 @@ function resolveCamoufoxMaxResponseBytes(env: NodeJS.ProcessEnv): number {
   return positiveIntegerEnv(env.TRUSS_CAMOUFOX_MAX_RESPONSE_BYTES) ?? defaultMaxResponseBytes;
 }
 
-function envFlagIsFalse(value: unknown): boolean {
-  return typeof value === "string" && value.trim().toLowerCase() === "false";
-}
-
 function positiveIntegerEnv(value: unknown): number | null {
   if (typeof value !== "string") {
     return null;
@@ -1971,6 +1878,10 @@ function positiveIntegerEnv(value: unknown): number | null {
   const parsed = Number.parseInt(value.trim(), 10);
 
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function envFlagIsFalse(value: unknown): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "false";
 }
 
 export function mergeCamoufoxAddonConfigEnv(
@@ -2030,30 +1941,6 @@ function camoufoxLauncherEnv({
   childEnv.TRUSS_PLAYWRIGHT_CORE_MODULE = playwrightCoreImportSpecifier();
 
   return childEnv;
-}
-
-function sharedCamoufoxBrowserKey({
-  env = process.env,
-  startTimeoutMs = defaultStartTimeoutMs,
-  trussHomeDir,
-}: CamoufoxBrowserOptions): string {
-  const relevantEnv = [
-    "TRUSS_CAMOUFOX_ADDON_PATHS",
-    "TRUSS_CAMOUFOX_ADDON_URLS",
-    "TRUSS_CAMOUFOX_CHILD_HEADLESS",
-    "TRUSS_CAMOUFOX_DEFAULT_ADDONS",
-    "TRUSS_CAMOUFOX_EXECUTABLE",
-    "TRUSS_CAMOUFOX_HEADLESS",
-    "TRUSS_CAMOUFOX_INSTALL_DIR",
-    "TRUSS_CAMOUFOX_RELEASE_TAG",
-  ];
-
-  return JSON.stringify({
-    env: Object.fromEntries(relevantEnv.map((key) => [key, env[key] ?? null])),
-    headless: resolveCamoufoxHeadless(env),
-    startTimeoutMs,
-    trussHomeDir: trussHomeDir ? resolve(trussHomeDir) : null,
-  });
 }
 
 function readCamoufoxConfigEnv(env: Record<string, string>): Record<string, unknown> {

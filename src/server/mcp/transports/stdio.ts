@@ -5,6 +5,9 @@ import type { McpTransport, McpTransportFactory, McpTransportOptions } from "./t
 import { errorForLog, logToStdout, truncateForLog } from "../../utils/logging.ts";
 import { mcpStdioApprovalKey, mcpStdioApprovalRequired } from "../stdio-approval.ts";
 
+export const maxMcpStdioDiagnosticLineLength = 64 * 1024;
+export const maxMcpStdioProtocolLineLength = 8 * 1024 * 1024;
+
 export const stdioTransportFactory: McpTransportFactory = {
   supports: (definition) => definition.transport === "stdio",
   async create(definition, options: McpTransportOptions) {
@@ -24,9 +27,10 @@ export const stdioTransportFactory: McpTransportFactory = {
       );
     }
 
+    const env = mcpStdioEnvironment(definition, options);
     const process = Bun.spawn([definition.command, ...(definition.args ?? [])], {
       cwd: definition.cwd,
-      env: definition.env ? { ...options.env, ...definition.env } : options.env,
+      env,
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
@@ -35,6 +39,22 @@ export const stdioTransportFactory: McpTransportFactory = {
     return new StdioMcpTransport(definition, process);
   },
 };
+
+export function mcpStdioEnvironment(
+  definition: McpServerDefinition,
+  options: McpTransportOptions,
+): NodeJS.ProcessEnv {
+  const browserManaged =
+    definition.trussManaged &&
+    (definition.id === "truss-global:truss-web-tools" ||
+      definition.id === "truss-global:truss-playwright-mcp");
+
+  return {
+    ...options.env,
+    ...(browserManaged ? options.managedBrowserEnv : undefined),
+    ...definition.env,
+  };
+}
 
 class StdioMcpTransport implements McpTransport {
   constructor(
@@ -50,26 +70,23 @@ class StdioMcpTransport implements McpTransport {
   }
 
   async *messages(): AsyncIterable<JsonRpcMessage> {
-    const decoder = new TextDecoderStream();
-    const lineStream = this.process.stdout.pipeThrough(decoder);
-    let buffered = "";
+    for await (const line of readBoundedStdioLines(
+      this.process.stdout,
+      maxMcpStdioProtocolLineLength,
+      () =>
+        logToStdout("mcp", "Discarded oversized unterminated stdout line from MCP server.", {
+          server: this.definition.name,
+        }),
+    )) {
+      const message = parseJsonRpcLine(line);
 
-    for await (const chunk of lineStream) {
-      buffered += chunk;
-      const lines = buffered.split(/\r?\n/);
-      buffered = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const message = parseJsonRpcLine(line);
-
-        if (message) {
-          yield message;
-        } else if (line.trim()) {
-          logToStdout("mcp", "Ignored non-JSON-RPC stdout line from MCP server.", {
-            line: truncateForLog(line),
-            server: this.definition.name,
-          });
-        }
+      if (message) {
+        yield message;
+      } else if (line.trim()) {
+        logToStdout("mcp", "Ignored non-JSON-RPC stdout line from MCP server.", {
+          line: truncateForLog(line),
+          server: this.definition.name,
+        });
       }
     }
   }
@@ -84,37 +101,21 @@ async function logStdioDiagnosticLines(
   streamName: "stderr" | "stdout",
   stream: ReadableStream<Uint8Array>,
 ): Promise<void> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffered = "";
-
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) {
-        break;
+    for await (const line of readBoundedStdioLines(
+      stream,
+      maxMcpStdioDiagnosticLineLength,
+      () =>
+        logToStdout("mcp", `Discarded oversized unterminated ${streamName} line from MCP server.`, {
+          server,
+        }),
+    )) {
+      if (!line.trim()) {
+        continue;
       }
 
-      buffered += decoder.decode(value, { stream: true });
-      const lines = buffered.split(/\r?\n/);
-      buffered = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (line.trim()) {
-          logToStdout("mcp", `MCP server ${streamName}.`, {
-            line: truncateForLog(line),
-            server,
-          });
-        }
-      }
-    }
-
-    buffered += decoder.decode();
-
-    if (buffered.trim()) {
       logToStdout("mcp", `MCP server ${streamName}.`, {
-        line: truncateForLog(buffered),
+        line: truncateForLog(line),
         server,
       });
     }
@@ -123,5 +124,71 @@ async function logStdioDiagnosticLines(
       error: errorForLog(caught),
       server,
     });
+  }
+}
+
+export async function* readBoundedStdioLines(
+  stream: ReadableStream<Uint8Array>,
+  maxLineLength: number,
+  onOversizedLine: () => void,
+): AsyncIterable<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let discardingLine = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      let chunk = value ? decoder.decode(value, { stream: !done }) : decoder.decode();
+
+      while (chunk) {
+        const newlineIndex = chunk.search(/\r?\n/u);
+
+        if (discardingLine) {
+          if (newlineIndex < 0) {
+            break;
+          }
+
+          discardingLine = false;
+          chunk = chunk.slice(newlineIndex + (chunk[newlineIndex] === "\r" ? 2 : 1));
+          continue;
+        }
+
+        if (newlineIndex < 0) {
+          if (buffered.length + chunk.length > maxLineLength) {
+            buffered = "";
+            discardingLine = true;
+            onOversizedLine();
+          } else {
+            buffered += chunk;
+          }
+          break;
+        }
+
+        const lineLength = buffered.length + newlineIndex;
+        const nextChunkIndex = newlineIndex + (chunk[newlineIndex] === "\r" ? 2 : 1);
+
+        if (lineLength > maxLineLength) {
+          buffered = "";
+          onOversizedLine();
+        } else {
+          yield `${buffered}${chunk.slice(0, newlineIndex)}`;
+          buffered = "";
+        }
+
+        chunk = chunk.slice(nextChunkIndex);
+      }
+
+      if (done) {
+        break;
+      }
+    }
+
+    if (!discardingLine && buffered) {
+      yield buffered;
+    }
+  } finally {
+    reader.releaseLock();
   }
 }

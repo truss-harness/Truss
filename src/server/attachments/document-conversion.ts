@@ -1,4 +1,9 @@
 import { Buffer } from "node:buffer";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
 import {
   fileExtension,
@@ -7,6 +12,8 @@ import {
   unsupportedAttachmentMessage,
 } from "../../shared/attachments.ts";
 import { convertWithPandocWasm } from "../pandoc.ts";
+import { executeCommand } from "../runtime/command-executor.ts";
+import { isStandaloneRuntime } from "../runtime/project-root.ts";
 import { ensurePdfjsRuntimePolyfills } from "./pdfjs-runtime-polyfills.ts";
 
 interface DocumentConversionInput {
@@ -257,6 +264,10 @@ async function renderPdfPagesToImages({
   name: string;
   pageRange?: string;
 }): Promise<RenderedDocumentImages> {
+  if (usesNodePdfImageRenderer()) {
+    return renderPdfPagesToImagesWithNode({ confirmLargeBatch, data, name, pageRange });
+  }
+
   const parser = await createPdfParser(data);
 
   try {
@@ -308,6 +319,99 @@ async function renderPdfPagesToImages({
   } finally {
     await parser.destroy();
   }
+}
+
+async function renderPdfPagesToImagesWithNode({
+  confirmLargeBatch,
+  data,
+  name,
+  pageRange,
+}: {
+  confirmLargeBatch: boolean;
+  data: Uint8Array;
+  name: string;
+  pageRange?: string;
+}): Promise<RenderedDocumentImages> {
+  const tempDirectory = await mkdtemp(join(tmpdir(), "truss-pdf-"));
+  const inputPath = join(tempDirectory, "input.pdf");
+
+  try {
+    await writeFile(inputPath, data);
+
+    const info = await runNodePdfImageRenderer<{ pageCount: number }>(inputPath, "info");
+    const selectedPages = parsePdfPageRange(pageRange, info.pageCount, name);
+    const renderedImageCount = selectedPages?.length ?? info.pageCount;
+
+    if (renderedImageCount > maxImageRenderPagesBeforeConfirmation && !confirmLargeBatch) {
+      throw new DocumentImageRenderConfirmationRequiredError({
+        name,
+        pageCount: renderedImageCount,
+      });
+    }
+
+    const rendered = await runNodePdfImageRenderer<{
+      images: Array<{ dataUrl: string; pageNumber: number }>;
+      pageCount: number;
+    }>(inputPath, "screenshot", selectedPages);
+
+    if (rendered.images.length === 0) {
+      throw new Error(`${name} did not contain a page Truss could render.`);
+    }
+
+    return {
+      images: rendered.images.map((image) => {
+        const dataUrl = image.dataUrl;
+        const bytes = Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+
+        return {
+          dataUrl,
+          mimeType: "image/png",
+          name: renderedPageImageAttachmentNameFor(name, image.pageNumber),
+          pageCount: rendered.pageCount,
+          pageNumber: image.pageNumber,
+          size: bytes.byteLength,
+        };
+      }),
+      pageCount: rendered.pageCount,
+    };
+  } finally {
+    await rm(tempDirectory, { force: true, recursive: true });
+  }
+}
+
+async function runNodePdfImageRenderer<T>(
+  inputPath: string,
+  mode: "info" | "screenshot",
+  pages?: number[],
+): Promise<T> {
+  const scriptPath = pdfImageRendererScriptPath();
+  const result = await executeCommand({
+    args: [scriptPath, inputPath, mode, ...(pages ? [JSON.stringify(pages)] : [])],
+    command: process.env.TRUSS_PDF_RENDERER_NODE?.trim() || process.env.TRUSS_CAMOUFOX_NODE?.trim() || "node",
+    cwd: dirname(scriptPath),
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Could not render PDF images: ${result.stderr.trim() || result.stdout.trim()}`);
+  }
+
+  try {
+    return JSON.parse(result.stdout) as T;
+  } catch {
+    throw new Error("Could not render PDF images: the renderer returned an invalid response.");
+  }
+}
+
+function usesNodePdfImageRenderer(): boolean {
+  return process.platform === "win32" && isStandaloneRuntime();
+}
+
+function pdfImageRendererScriptPath(): string {
+  if (isStandaloneRuntime()) {
+    return join(dirname(process.execPath), "pdf-image-renderer.mjs");
+  }
+
+  return fileURLToPath(new URL("./pdf-image-renderer.mjs", import.meta.url));
 }
 
 async function createPdfParser(data: Uint8Array): Promise<PdfParser> {

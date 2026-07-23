@@ -11,6 +11,8 @@ import type {
 import { isStandaloneRuntime } from "../runtime/project-root.ts";
 import { json, readJson } from "./responses.ts";
 import type { ServerContext } from "./context.ts";
+import { browserBrokerCredentialEnv } from "../browser/broker-protocol.ts";
+import type { BrowserBrokerCredentials } from "../browser/broker-protocol.ts";
 
 const workspaceLaunchTimeoutMs = 15_000;
 const maxLaunchWorkspacePathLength = 4_096;
@@ -229,6 +231,7 @@ function startTrussLaunch(
 ): WorkspaceLaunchEntry {
   const child = Bun.spawn(workspaceLaunchCommand(context, target), {
     cwd: target.cwd,
+    env: workspaceLaunchEnvironment(context.options.browserBroker),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -252,11 +255,22 @@ function startTrussLaunch(
   return entry;
 }
 
+export function workspaceLaunchEnvironment(
+  browserBroker?: BrowserBrokerCredentials,
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    ...(browserBroker ? browserBrokerCredentialEnv(browserBroker) : undefined),
+  };
+}
+
 function workspaceLaunchCommand(context: ServerContext, target: WorkspaceLaunchTarget): string[] {
   const scopeArgs = target.mode === "workspace" ? [target.workspacePath] : [];
+  const homeArgs = ["--truss-home", context.options.trussHome.dir];
 
   if (isStandaloneRuntime()) {
-    return [process.execPath, "spawn", ...scopeArgs, "--no-autolaunch"];
+    return [process.execPath, "spawn", ...scopeArgs, ...homeArgs, "--no-autolaunch"];
   }
 
   return [
@@ -264,6 +278,7 @@ function workspaceLaunchCommand(context: ServerContext, target: WorkspaceLaunchT
     resolve(context.options.projectRoot, "src", "server", "index.ts"),
     "spawn",
     ...scopeArgs,
+    ...homeArgs,
     "--no-autolaunch",
   ];
 }

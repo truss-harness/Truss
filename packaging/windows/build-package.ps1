@@ -5,7 +5,8 @@ param(
   [string]$WinSWVersion = "2.12.0",
   [switch]$SkipWinSWDownload,
   [switch]$BuildInstaller,
-  [string]$InnoSetupCompiler = "iscc.exe"
+  [string]$InnoSetupCompiler = "iscc.exe",
+  [string]$NodePath
 )
 
 Set-StrictMode -Version Latest
@@ -247,7 +248,21 @@ try {
   New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
 
   Copy-Item -LiteralPath (Join-Path $repoRoot "dist\truss.exe") -Destination $stageRoot -Force
+  if (-not $NodePath) {
+    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+    if (-not $nodeCommand) {
+      throw "Node.js is required to build the Windows service package. Install Node.js or pass -NodePath."
+    }
+    $NodePath = $nodeCommand.Source
+  }
+  Copy-Item -LiteralPath (Resolve-Path -LiteralPath $NodePath).Path -Destination (Join-Path $stageRoot "node.exe") -Force
   Copy-Item -LiteralPath (Join-Path $repoRoot "public") -Destination $stageRoot -Recurse -Force
+  Copy-Item -LiteralPath (Join-Path $repoRoot "src\server\attachments\pdf-image-renderer.mjs") -Destination $stageRoot -Force
+  New-Item -ItemType Directory -Path (Join-Path $stageRoot "node_modules\@napi-rs") -Force | Out-Null
+  Copy-Item -LiteralPath (Join-Path $repoRoot "node_modules\pdf-parse") -Destination (Join-Path $stageRoot "node_modules") -Recurse -Force
+  Copy-Item -LiteralPath (Join-Path $repoRoot "node_modules\pdfjs-dist") -Destination (Join-Path $stageRoot "node_modules") -Recurse -Force
+  Copy-Item -LiteralPath (Join-Path $repoRoot "node_modules\@napi-rs\canvas") -Destination (Join-Path $stageRoot "node_modules\@napi-rs") -Recurse -Force
+  Copy-Item -LiteralPath (Join-Path $repoRoot "node_modules\@napi-rs\canvas-win32-x64-msvc") -Destination (Join-Path $stageRoot "node_modules\@napi-rs") -Recurse -Force
   Copy-Item -LiteralPath (Join-Path $repoRoot "icon.png") -Destination $stageRoot -Force
   New-IcoFileFromPng -SourcePng (Join-Path $repoRoot "icon.png") -DestinationIco (Join-Path $stageRoot "truss.ico")
 
@@ -299,7 +314,7 @@ try {
     $winSwUrl = "https://github.com/winsw/winsw/releases/download/v$WinSWVersion/WinSW-x64.exe"
     Invoke-WebRequest -Uri $winSwUrl -OutFile $serviceWrapper
   } else {
-    Write-Warning "Skipping WinSW download. Copy WinSW-x64.exe to truss-service.exe before installing the service."
+    throw "WinSW is required. Remove -SkipWinSWDownload or pass -WinSWPath."
   }
 
   if (Test-Path -LiteralPath $zipPath) {

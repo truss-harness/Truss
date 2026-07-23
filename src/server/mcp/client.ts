@@ -14,6 +14,7 @@ import { createJsonRpcNotification, createJsonRpcRequest, isJsonRpcResponse } fr
 
 export interface McpClientHostOptions {
   env: NodeJS.ProcessEnv;
+  managedBrowserEnv?: NodeJS.ProcessEnv;
   onNotification?(notification: McpClientNotification): void | Promise<void>;
 }
 
@@ -55,7 +56,10 @@ export class McpClientHost {
       throw new Error(`No MCP transport supports "${definition.transport}".`);
     }
 
-    const transport = await factory.create(definition, { env: this.options.env });
+    const transport = await factory.create(definition, {
+      env: this.options.env,
+      managedBrowserEnv: this.options.managedBrowserEnv,
+    });
     const connection = new McpConnection(transport, this.options.onNotification);
 
     this.#connections.set(definition.id, connection);

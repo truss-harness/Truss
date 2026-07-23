@@ -18,8 +18,6 @@ interface McpSettingsRow {
   command_runner_safe_action: string;
   id: 1;
   playwright_mcp_enabled: boolean | number;
-  playwright_mcp_headless: boolean | number;
-  playwright_mcp_shared_browser: boolean | number;
   playwright_mcp_tools: string;
   sanitizer_model_id: string | null;
   sanitizer_provider_id: string | null;
@@ -37,8 +35,6 @@ export const defaultCommandRunnerSettings: CommandRunnerSettingsSummary = {
 
 export const defaultPlaywrightMcpSettings: PlaywrightMcpSettingsSummary = {
   enabled: false,
-  headless: true,
-  sharedBrowser: true,
   tools: "*",
 };
 
@@ -65,13 +61,11 @@ export class McpSettingsRepository {
             command_runner_risky_action,
             command_runner_dangerous_action,
             playwright_mcp_enabled,
-            playwright_mcp_headless,
             playwright_mcp_tools,
-            playwright_mcp_shared_browser,
             created_at,
             updated_at
           )
-          VALUES (1, NULL, NULL, NULL, NULL, 1, 1, 'auto-allow', 'ask', 'ask', 0, 1, '*', 1, ?, ?)
+          VALUES (1, NULL, NULL, NULL, NULL, 1, 1, 'auto-allow', 'ask', 'ask', 0, '*', ?, ?)
           ON CONFLICT(id) DO NOTHING
         `,
       )
@@ -94,9 +88,7 @@ export class McpSettingsRepository {
             command_runner_risky_action,
             command_runner_dangerous_action,
             playwright_mcp_enabled,
-            playwright_mcp_headless,
-            playwright_mcp_tools,
-            playwright_mcp_shared_browser
+            playwright_mcp_tools
           FROM mcp_settings
           WHERE id = 1
         `,
@@ -144,12 +136,6 @@ export class McpSettingsRepository {
       enabled: Object.hasOwn(playwrightMcpUpdate, "enabled")
         ? playwrightMcpUpdate.enabled === true
         : current.playwrightMcp.enabled,
-      headless: Object.hasOwn(playwrightMcpUpdate, "headless")
-        ? playwrightMcpUpdate.headless === true
-        : current.playwrightMcp.headless,
-      sharedBrowser: Object.hasOwn(playwrightMcpUpdate, "sharedBrowser")
-        ? playwrightMcpUpdate.sharedBrowser === true
-        : current.playwrightMcp.sharedBrowser,
       tools: Object.hasOwn(playwrightMcpUpdate, "tools")
         ? normalizePlaywrightMcpTools(playwrightMcpUpdate.tools)
         : current.playwrightMcp.tools,
@@ -179,9 +165,7 @@ export class McpSettingsRepository {
               command_runner_risky_action = ?,
               command_runner_dangerous_action = ?,
               playwright_mcp_enabled = ?,
-              playwright_mcp_headless = ?,
               playwright_mcp_tools = ?,
-              playwright_mcp_shared_browser = ?,
               updated_at = ?
           WHERE id = 1
         `,
@@ -197,9 +181,7 @@ export class McpSettingsRepository {
         next.commandRunner.riskyAction,
         next.commandRunner.dangerousAction,
         next.playwrightMcp.enabled ? 1 : 0,
-        next.playwrightMcp.headless ? 1 : 0,
         next.playwrightMcp.tools,
-        next.playwrightMcp.sharedBrowser ? 1 : 0,
         new Date().toISOString(),
       );
 
@@ -231,9 +213,6 @@ function rowToSummary(row: McpSettingsRow): McpSettingsSummary {
     },
     playwrightMcp: {
       enabled: row.playwright_mcp_enabled === true || row.playwright_mcp_enabled === 1,
-      headless: row.playwright_mcp_headless === true || row.playwright_mcp_headless === 1,
-      sharedBrowser:
-        row.playwright_mcp_shared_browser === true || row.playwright_mcp_shared_browser === 1,
       tools: normalizePlaywrightMcpTools(row.playwright_mcp_tools),
     },
     sanitizerModelId: normalizeOptionalText(row.sanitizer_model_id),

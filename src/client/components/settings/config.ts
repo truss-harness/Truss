@@ -18,8 +18,6 @@ export const defaultCommandRunnerSettings: CommandRunnerSettingsSummary = {
 
 export const defaultPlaywrightMcpSettings: PlaywrightMcpSettingsSummary = {
   enabled: false,
-  headless: true,
-  sharedBrowser: true,
   tools: "*",
 };
 

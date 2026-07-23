@@ -1736,8 +1736,6 @@ function testContext({
         },
         playwrightMcp: {
           enabled: true,
-          headless: true,
-          sharedBrowser: false,
           tools: "all",
         },
         sanitizerModelId: null,
